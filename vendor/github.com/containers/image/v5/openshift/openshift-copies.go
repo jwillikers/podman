@@ -4,8 +4,8 @@ import (
 	"crypto/tls"
 	"crypto/x509"
 	"encoding/json"
+	"errors"
 	"fmt"
-	"io/ioutil"
 	"net"
 	"net/http"
 	"net/url"
@@ -19,12 +19,11 @@ import (
 	"github.com/containers/storage/pkg/homedir"
 	"github.com/ghodss/yaml"
 	"github.com/imdario/mergo"
-	"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
 	"golang.org/x/net/http2"
 )
 
-// restTLSClientConfig is a modified copy of k8s.io/kubernets/pkg/client/restclient.TLSClientConfig.
+// restTLSClientConfig is a modified copy of k8s.io/kubernetes/pkg/client/restclient.TLSClientConfig.
 // restTLSClientConfig contains settings to enable transport layer security
 type restTLSClientConfig struct {
 	// Server requires TLS client certificate authentication
@@ -45,7 +44,7 @@ type restTLSClientConfig struct {
 	CAData []byte
 }
 
-// restConfig is a modified copy of k8s.io/kubernets/pkg/client/restclient.Config.
+// restConfig is a modified copy of k8s.io/kubernetes/pkg/client/restclient.Config.
 // Config holds the common attributes that can be passed to a Kubernetes client on
 // initialization.
 type restConfig struct {
@@ -254,7 +253,7 @@ func getServerIdentificationPartialConfig(configAuthInfo clientcmdAuthInfo, conf
 // we want this order of precedence for user identification
 // 1.  configAuthInfo minus auth-path (the final result of command line flags and merged .kubeconfig files)
 // 2.  configAuthInfo.auth-path (this file can contain information that conflicts with #1, and we want #1 to win the priority)
-// 3.  if there is not enough information to idenfity the user, load try the ~/.kubernetes_auth file
+// 3.  if there is not enough information to identify the user, load try the ~/.kubernetes_auth file
 // 4.  if there is not enough information to identify the user, prompt if possible
 func getUserIdentificationPartialConfig(configAuthInfo clientcmdAuthInfo) (*restConfig, error) {
 	mergedConfig := &restConfig{}
@@ -279,7 +278,7 @@ func getUserIdentificationPartialConfig(configAuthInfo clientcmdAuthInfo) (*rest
 }
 
 // ConfirmUsable is a modified copy of k8s.io/kubernetes/pkg/client/unversioned/clientcmd.DirectClientConfig.ConfirmUsable.
-// ConfirmUsable looks a particular context and determines if that particular part of the config is useable.  There might still be errors in the config,
+// ConfirmUsable looks a particular context and determines if that particular part of the config is usable.  There might still be errors in the config,
 // but no errors in the sections requested or referenced.  It does not return early so that it can find as many errors as possible.
 func (config *directClientConfig) ConfirmUsable() error {
 	var validationErrors []error
@@ -333,7 +332,7 @@ var (
 	errEmptyCluster = errors.New("cluster has no server defined")
 )
 
-//helper for checking certificate/key/CA
+// helper for checking certificate/key/CA
 func validateFileIsReadable(name string) error {
 	answer, err := os.Open(name)
 	defer func() {
@@ -355,19 +354,19 @@ func validateClusterInfo(clusterName string, clusterInfo clientcmdCluster) []err
 
 	if len(clusterInfo.Server) == 0 {
 		if len(clusterName) == 0 {
-			validationErrors = append(validationErrors, errors.Errorf("default cluster has no server defined"))
+			validationErrors = append(validationErrors, errors.New("default cluster has no server defined"))
 		} else {
-			validationErrors = append(validationErrors, errors.Errorf("no server found for cluster %q", clusterName))
+			validationErrors = append(validationErrors, fmt.Errorf("no server found for cluster %q", clusterName))
 		}
 	}
 	// Make sure CA data and CA file aren't both specified
 	if len(clusterInfo.CertificateAuthority) != 0 && len(clusterInfo.CertificateAuthorityData) != 0 {
-		validationErrors = append(validationErrors, errors.Errorf("certificate-authority-data and certificate-authority are both specified for %v. certificate-authority-data will override", clusterName))
+		validationErrors = append(validationErrors, fmt.Errorf("certificate-authority-data and certificate-authority are both specified for %v. certificate-authority-data will override", clusterName))
 	}
 	if len(clusterInfo.CertificateAuthority) != 0 {
 		err := validateFileIsReadable(clusterInfo.CertificateAuthority)
 		if err != nil {
-			validationErrors = append(validationErrors, errors.Errorf("unable to read certificate-authority %v for %v due to %v", clusterInfo.CertificateAuthority, clusterName, err))
+			validationErrors = append(validationErrors, fmt.Errorf("unable to read certificate-authority %v for %v due to %v", clusterInfo.CertificateAuthority, clusterName, err))
 		}
 	}
 
@@ -391,34 +390,34 @@ func validateAuthInfo(authInfoName string, authInfo clientcmdAuthInfo) []error {
 	if len(authInfo.ClientCertificate) != 0 || len(authInfo.ClientCertificateData) != 0 {
 		// Make sure cert data and file aren't both specified
 		if len(authInfo.ClientCertificate) != 0 && len(authInfo.ClientCertificateData) != 0 {
-			validationErrors = append(validationErrors, errors.Errorf("client-cert-data and client-cert are both specified for %v. client-cert-data will override", authInfoName))
+			validationErrors = append(validationErrors, fmt.Errorf("client-cert-data and client-cert are both specified for %v. client-cert-data will override", authInfoName))
 		}
 		// Make sure key data and file aren't both specified
 		if len(authInfo.ClientKey) != 0 && len(authInfo.ClientKeyData) != 0 {
-			validationErrors = append(validationErrors, errors.Errorf("client-key-data and client-key are both specified for %v; client-key-data will override", authInfoName))
+			validationErrors = append(validationErrors, fmt.Errorf("client-key-data and client-key are both specified for %v; client-key-data will override", authInfoName))
 		}
 		// Make sure a key is specified
 		if len(authInfo.ClientKey) == 0 && len(authInfo.ClientKeyData) == 0 {
-			validationErrors = append(validationErrors, errors.Errorf("client-key-data or client-key must be specified for %v to use the clientCert authentication method", authInfoName))
+			validationErrors = append(validationErrors, fmt.Errorf("client-key-data or client-key must be specified for %v to use the clientCert authentication method", authInfoName))
 		}
 
 		if len(authInfo.ClientCertificate) != 0 {
 			err := validateFileIsReadable(authInfo.ClientCertificate)
 			if err != nil {
-				validationErrors = append(validationErrors, errors.Errorf("unable to read client-cert %v for %v due to %v", authInfo.ClientCertificate, authInfoName, err))
+				validationErrors = append(validationErrors, fmt.Errorf("unable to read client-cert %v for %v due to %v", authInfo.ClientCertificate, authInfoName, err))
 			}
 		}
 		if len(authInfo.ClientKey) != 0 {
 			err := validateFileIsReadable(authInfo.ClientKey)
 			if err != nil {
-				validationErrors = append(validationErrors, errors.Errorf("unable to read client-key %v for %v due to %v", authInfo.ClientKey, authInfoName, err))
+				validationErrors = append(validationErrors, fmt.Errorf("unable to read client-key %v for %v due to %v", authInfo.ClientKey, authInfoName, err))
 			}
 		}
 	}
 
 	// authPath also provides information for the client to identify the server, so allow multiple auth methods in that case
 	if (len(methods) > 1) && (!usingAuthPath) {
-		validationErrors = append(validationErrors, errors.Errorf("more than one authentication method found for %v; found %v, only one is allowed", authInfoName, methods))
+		validationErrors = append(validationErrors, fmt.Errorf("more than one authentication method found for %v; found %v, only one is allowed", authInfoName, methods))
 	}
 
 	return validationErrors
@@ -538,7 +537,7 @@ func (e errConfigurationInvalid) Error() string {
 // ClientConfigLoadingRules is an ExplicitPath and string slice of specific locations that are used for merging together a Config
 // Callers can put the chain together however they want, but we'd recommend:
 // EnvVarPathFiles if set (a list of files if set) OR the HomeDirectoryPath
-// ExplicitPath is special, because if a user specifically requests a certain file be used and error is reported if thie file is not present
+// ExplicitPath is special, because if a user specifically requests a certain file be used and error is reported if this file is not present
 type clientConfigLoadingRules struct {
 	Precedence []string
 }
@@ -546,8 +545,10 @@ type clientConfigLoadingRules struct {
 // Load is a modified copy of k8s.io/kubernetes/pkg/client/unversioned/clientcmd.ClientConfigLoadingRules.Load
 // Load starts by running the MigrationRules and then
 // takes the loading rules and returns a Config object based on following rules.
-//   if the ExplicitPath, return the unmerged explicit file
-//   Otherwise, return a merged config based on the Precedence slice
+//
+//   - if the ExplicitPath, return the unmerged explicit file
+//   - Otherwise, return a merged config based on the Precedence slice
+//
 // A missing ExplicitPath file produces an error. Empty filenames or other missing files are ignored.
 // Read errors or files with non-deserializable content produce errors.
 // The first file to set a particular map key wins and map key's value is never changed.
@@ -579,7 +580,7 @@ func (rules *clientConfigLoadingRules) Load() (*clientcmdConfig, error) {
 			continue
 		}
 		if err != nil {
-			errlist = append(errlist, errors.Wrapf(err, "Error loading config file \"%s\"", filename))
+			errlist = append(errlist, fmt.Errorf("loading config file \"%s\": %w", filename, err))
 			continue
 		}
 
@@ -625,7 +626,7 @@ func (rules *clientConfigLoadingRules) Load() (*clientcmdConfig, error) {
 // loadFromFile is a modified copy of k8s.io/kubernetes/pkg/client/unversioned/clientcmd.LoadFromFile
 // LoadFromFile takes a filename and deserializes the contents into Config object
 func loadFromFile(filename string) (*clientcmdConfig, error) {
-	kubeconfigBytes, err := ioutil.ReadFile(filename)
+	kubeconfigBytes, err := os.ReadFile(filename)
 	if err != nil {
 		return nil, err
 	}
@@ -692,7 +693,7 @@ func resolveLocalPaths(config *clientcmdConfig) error {
 		}
 		base, err := filepath.Abs(filepath.Dir(cluster.LocationOfOrigin))
 		if err != nil {
-			return errors.Wrapf(err, "Could not determine the absolute path of config file %s", cluster.LocationOfOrigin)
+			return fmt.Errorf("Could not determine the absolute path of config file %s: %w", cluster.LocationOfOrigin, err)
 		}
 
 		if err := resolvePaths(getClusterFileReferences(cluster), base); err != nil {
@@ -705,7 +706,7 @@ func resolveLocalPaths(config *clientcmdConfig) error {
 		}
 		base, err := filepath.Abs(filepath.Dir(authInfo.LocationOfOrigin))
 		if err != nil {
-			return errors.Wrapf(err, "Could not determine the absolute path of config file %s", authInfo.LocationOfOrigin)
+			return fmt.Errorf("Could not determine the absolute path of config file %s: %w", authInfo.LocationOfOrigin, err)
 		}
 
 		if err := resolvePaths(getAuthInfoFileReferences(authInfo), base); err != nil {
@@ -741,7 +742,7 @@ func resolvePaths(refs []*string, base string) error {
 	return nil
 }
 
-// restClientFor is a modified copy of k8s.io/kubernets/pkg/client/restclient.RESTClientFor.
+// restClientFor is a modified copy of k8s.io/kubernetes/pkg/client/restclient.RESTClientFor.
 // RESTClientFor returns a RESTClient that satisfies the requested attributes on a client Config
 // object. Note that a RESTClient may require fields that are optional when initializing a Client.
 // A RESTClient created by this method is generic - it expects to operate on an API that follows
@@ -769,13 +770,13 @@ func restClientFor(config *restConfig) (*url.URL, *http.Client, error) {
 	return baseURL, httpClient, nil
 }
 
-// defaultServerURL is a modified copy of k8s.io/kubernets/pkg/client/restclient.DefaultServerURL.
+// defaultServerURL is a modified copy of k8s.io/kubernetes/pkg/client/restclient.DefaultServerURL.
 // DefaultServerURL converts a host, host:port, or URL string to the default base server API path
 // to use with a Client at a given API version following the standard conventions for a
 // Kubernetes API.
 func defaultServerURL(host string, defaultTLS bool) (*url.URL, error) {
 	if host == "" {
-		return nil, errors.Errorf("host must be a URL or a host:port pair")
+		return nil, errors.New("host must be a URL or a host:port pair")
 	}
 	base := host
 	hostURL, err := url.Parse(base)
@@ -792,7 +793,7 @@ func defaultServerURL(host string, defaultTLS bool) (*url.URL, error) {
 			return nil, err
 		}
 		if hostURL.Path != "" && hostURL.Path != "/" {
-			return nil, errors.Errorf("host must be a URL or a host:port pair: %q", base)
+			return nil, fmt.Errorf("host must be a URL or a host:port pair: %q", base)
 		}
 	}
 
@@ -800,7 +801,7 @@ func defaultServerURL(host string, defaultTLS bool) (*url.URL, error) {
 	return hostURL, nil
 }
 
-// defaultServerURLFor is a modified copy of k8s.io/kubernets/pkg/client/restclient.defaultServerURLFor.
+// defaultServerURLFor is a modified copy of k8s.io/kubernetes/pkg/client/restclient.defaultServerURLFor.
 // defaultServerUrlFor is shared between IsConfigTransportTLS and RESTClientFor. It
 // requires Host and Version to be set prior to being called.
 func defaultServerURLFor(config *restConfig) (*url.URL, error) {
@@ -818,7 +819,7 @@ func defaultServerURLFor(config *restConfig) (*url.URL, error) {
 	return defaultServerURL(host, defaultTLS)
 }
 
-// transportFor is a modified copy of k8s.io/kubernets/pkg/client/restclient.transportFor.
+// transportFor is a modified copy of k8s.io/kubernetes/pkg/client/restclient.transportFor.
 // TransportFor returns an http.RoundTripper that will provide the authentication
 // or transport level security defined by the provided Config. Will return the
 // default http.DefaultTransport if no special case behavior is needed.
@@ -827,7 +828,7 @@ func transportFor(config *restConfig) (http.RoundTripper, error) {
 	return transportNew(config)
 }
 
-// isConfigTransportTLS is a modified copy of k8s.io/kubernets/pkg/client/restclient.IsConfigTransportTLS.
+// isConfigTransportTLS is a modified copy of k8s.io/kubernetes/pkg/client/restclient.IsConfigTransportTLS.
 // IsConfigTransportTLS returns true if and only if the provided
 // config will result in a protected connection to the server when it
 // is passed to restclient.RESTClientFor().  Use to determine when to
@@ -862,7 +863,7 @@ func transportNew(config *restConfig) (http.RoundTripper, error) {
 
 	// REMOVED: HTTPWrappersForConfig(config, rt) in favor of the caller setting HTTP headers itself based on restConfig. Only this inlined check remains.
 	if len(config.Username) != 0 && len(config.BearerToken) != 0 {
-		return nil, errors.Errorf("username/password or bearer token may be set, but not both")
+		return nil, errors.New("username/password or bearer token may be set, but not both")
 	}
 
 	return rt, nil
@@ -955,7 +956,7 @@ func tlsConfigFor(c *restConfig) (*tls.Config, error) {
 		return nil, nil
 	}
 	if c.HasCA() && c.Insecure {
-		return nil, errors.Errorf("specifying a root certificates file with the insecure flag is not allowed")
+		return nil, errors.New("specifying a root certificates file with the insecure flag is not allowed")
 	}
 	if err := loadTLSFiles(c); err != nil {
 		return nil, err
@@ -1013,7 +1014,7 @@ func dataFromSliceOrFile(data []byte, file string) ([]byte, error) {
 		return data, nil
 	}
 	if len(file) > 0 {
-		fileData, err := ioutil.ReadFile(file)
+		fileData, err := os.ReadFile(file)
 		if err != nil {
 			return []byte{}, err
 		}
@@ -1055,11 +1056,11 @@ func (c *restConfig) HasCertAuth() bool {
 // Config holds the information needed to build connect to remote kubernetes clusters as a given user
 // IMPORTANT if you add fields to this struct, please update IsConfigEmpty()
 type clientcmdConfig struct {
-	// Clusters is a map of referencable names to cluster configs
+	// Clusters is a map of referenceable names to cluster configs
 	Clusters clustersMap `json:"clusters"`
-	// AuthInfos is a map of referencable names to user configs
+	// AuthInfos is a map of referenceable names to user configs
 	AuthInfos authInfosMap `json:"users"`
-	// Contexts is a map of referencable names to context configs
+	// Contexts is a map of referenceable names to context configs
 	Contexts contextsMap `json:"contexts"`
 	// CurrentContext is the name of the context that you would like to use by default
 	CurrentContext string `json:"current-context"`
