@@ -1,3 +1,4 @@
+//go:build cgo
 // +build cgo
 
 package copy
@@ -25,7 +26,7 @@ import (
 	"github.com/containers/storage/pkg/idtools"
 	"github.com/containers/storage/pkg/pools"
 	"github.com/containers/storage/pkg/system"
-	rsystem "github.com/opencontainers/runc/libcontainer/system"
+	"github.com/containers/storage/pkg/unshare"
 	"golang.org/x/sys/unix"
 )
 
@@ -153,7 +154,7 @@ func DirCopy(srcDir, dstDir string, copyMode Mode, copyXattrs bool) error {
 		dstPath := filepath.Join(dstDir, relPath)
 		stat, ok := f.Sys().(*syscall.Stat_t)
 		if !ok {
-			return fmt.Errorf("Unable to get raw syscall.Stat_t data for %s", srcPath)
+			return fmt.Errorf("unable to get raw syscall.Stat_t data for %s", srcPath)
 		}
 
 		isHardlink := false
@@ -205,7 +206,7 @@ func DirCopy(srcDir, dstDir string, copyMode Mode, copyXattrs bool) error {
 			s.Close()
 
 		case mode&os.ModeDevice != 0:
-			if rsystem.RunningInUserNS() {
+			if unshare.IsRootless() {
 				// cannot create a device if running in user namespace
 				return nil
 			}
@@ -291,6 +292,10 @@ func doCopyXattrs(srcPath, dstPath string) error {
 				return err
 			}
 		}
+	}
+
+	if unshare.IsRootless() {
+		return nil
 	}
 
 	// We need to copy this attribute if it appears in an overlay upper layer, as
